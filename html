@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lupus in Fabula</title>
+<style>
+/* --- Reset e base --- */
+* { margin:0; padding:0; box-sizing:border-box; font-family:sans-serif; }
+body { background:#121212; color:#ddd; min-height:100vh; display:flex; justify-content:center; align-items:flex-start; padding:20px; }
+h1,h2 { font-family: "Georgia", serif; }
+button { cursor:pointer; }
+.hidden { display:none; }
+
+/* --- Layout generale --- */
+.container { max-width:500px; width:100%; margin:0 auto; }
+.section { background:#1a1a1a; padding:20px; border-radius:8px; margin-bottom:20px; box-shadow:0 0 10px rgba(0,0,0,0.5); }
+input, select { width:100%; padding:8px; margin:5px 0 15px; border-radius:4px; border:none; font-size:1em; font-family:sans-serif; }
+button { padding:10px; border:none; border-radius:4px; background:#555; color:#ddd; font-size:1em; transition:0.2s; }
+button:hover { background:#777; }
+.role-icon { font-size:50px; cursor:pointer; color:silver; transition:0.3s; }
+.role-icon:hover { transform:scale(1.1); }
+.participant { padding:5px 0; border-bottom:1px solid #333; }
+
+/* --- Overlay regole --- */
+.overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); color:#ddd; display:flex; justify-content:center; align-items:center; padding:20px; z-index:10; }
+.overlay-content { background:#222; padding:20px; border-radius:8px; max-width:500px; max-height:80%; overflow-y:auto; position:relative; }
+.overlay-content button { position:absolute; top:10px; right:10px; }
+
+/* --- Titoli e testi --- */
+h1 { color:silver; text-align:center; margin-bottom:20px; }
+h2 { color:#ccc; margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- CREAZIONE STANZA -->
+  <div id="createRoom" class="section">
+    <h1>Lupus in Fabula</h1>
+    <h2>Crea stanza</h2>
+    <label>Nome stanza:</label>
+    <input type="text" id="roomName" placeholder="Esempio: Villaggio Nero">
+    <label>Numero giocatori (min 4):</label>
+    <input type="number" id="numPlayers" min="4" max="20" value="4">
+    <label>Seleziona ruoli:</label>
+    <div id="roleOptions">
+      <label><input type="checkbox" value="Lupus" checked> Lupus</label><br>
+      <label><input type="checkbox" value="Veggente" checked> Veggente</label><br>
+      <label><input type="checkbox" value="Contadino" checked> Contadino</label><br>
+      <label><input type="checkbox" value="Medium"> Medium</label><br>
+      <label><input type="checkbox" value="Guardia"> Guardia</label><br>
+    </div>
+    <button id="copyLinkBtn">Copia link invito</button>
+    <button id="createBtn">Crea stanza</button>
+    <p id="copyMsg" style="color:green; display:none;">Link copiato negli appunti!</p>
+  </div>
+
+  <!-- REGISTRAZIONE NOME -->
+  <div id="joinRoom" class="section hidden">
+    <h2>Inserisci il tuo nome</h2>
+    <input type="text" id="playerName" placeholder="Nome">
+    <button id="joinBtn">Partecipa</button>
+    <h3>Giocatori registrati:</h3>
+    <div id="participants"></div>
+  </div>
+
+  <!-- SCHERMATA GIOCATORE -->
+  <div id="playerScreen" class="section hidden">
+    <h1>Lupus in Fabula</h1>
+    <p>Stanza: <span id="roomDisplay"></span> | Giocatore: <span id="playerDisplay"></span></p>
+    <span class="role-icon" id="roleIcon">🐺</span>
+    <h2 id="roleName"></h2>
+    <p id="roleRules" class="hidden"></p>
+    <button id="generalRulesBtn">ℹ️ Regole generali</button>
+  </div>
+
+  <!-- SCHERMATA NARRATORE -->
+  <div id="hostScreen" class="section hidden">
+    <h1>Schermata Narratore</h1>
+    <h2>Giocatori</h2>
+    <div id="hostParticipants"></div>
+    <button id="startGameBtn">Avvia partita</button>
+    <h2>Copione della notte</h2>
+    <div id="nightText">
+      <p>1. Tutti chiudono gli occhi</p>
+      <p>2. Si svegliano i Lupus</p>
+      <p>3. I Lupus scelgono una vittima</p>
+      <p>4. I Lupus tornano a dormire</p>
+      <p>5. Si sveglia il Veggente</p>
+      <p>6. Tutti dormono</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- OVERLAY REGOLE GENERALI -->
+<div id="overlay" class="overlay hidden">
+  <div class="overlay-content">
+    <button id="closeOverlay">✖</button>
+    <h2>Regole generali</h2>
+    <p>• Il gioco alterna giorno e notte.<br>
+       • Di notte agiscono i ruoli segreti.<br>
+       • Di giorno si discute e si vota.<br>
+       • Il villaggio vince se elimina tutti i Lupus.<br>
+       • I Lupus vincono se restano in maggioranza.</p>
+  </div>
+</div>
+
+<script>
+// --- Dati temporanei ---
+let players = [];
+let roles = [];
+let roomName = "";
+let playerName = "";
+let roleAssignments = {};
+
+// --- Elementi ---
+const createRoomEl = document.getElementById("createRoom");
+const joinRoomEl = document.getElementById("joinRoom");
+const playerScreenEl = document.getElementById("playerScreen");
+const hostScreenEl = document.getElementById("hostScreen");
+const participantsEl = document.getElementById("participants");
+const hostParticipantsEl = document.getElementById("hostParticipants");
+const roleIconEl = document.getElementById("roleIcon");
+const roleNameEl = document.getElementById("roleName");
+const roleRulesEl = document.getElementById("roleRules");
+const roomDisplayEl = document.getElementById("roomDisplay");
+const playerDisplayEl = document.getElementById("playerDisplay");
+const overlayEl = document.getElementById("overlay");
+
+// --- CREA STANZA ---
+document.getElementById("createBtn").addEventListener("click", () => {
+  roomName = document.getElementById("roomName").value || "Stanza Senza Nome";
+  const numPlayers = parseInt(document.getElementById("numPlayers").value);
+  if(numPlayers < 4){ alert("Minimo 4 giocatori"); return; }
+  roles = Array.from(document.querySelectorAll("#roleOptions input:checked")).map(r=>r.value);
+  alert("Stanza creata! Ora copia il link d'invito e apri il sito sugli altri telefoni.");
+  createRoomEl.classList.add("hidden");
+  joinRoomEl.classList.remove("hidden");
+});
+
+// --- COPIA LINK ---
+document.getElementById("copyLinkBtn").addEventListener("click", ()=>{
+  navigator.clipboard.writeText(window.location.href);
+  document.getElementById("copyMsg").style.display="block";
+  setTimeout(()=>{document.getElementById("copyMsg").style.display="none";},2000);
+});
+
+// --- PARTECIPA ---
+document.getElementById("joinBtn").addEventListener("click", ()=>{
+  playerName = document.getElementById("playerName").value.trim();
+  if(!playerName){ alert("Inserisci un nome"); return; }
+  if(players.includes(playerName)){ alert("Nome già presente"); return; }
+  players.push(playerName);
+  updateParticipants();
+  localStorage.setItem("playerName", playerName);
+  if(players.length >= 4){ document.getElementById("startGameBtn").disabled=false; }
+});
+
+// --- UPDATE ELENCO ---
+function updateParticipants(){
+  participantsEl.innerHTML = "";
+  hostParticipantsEl.innerHTML = "";
+  players.forEach(p=>{
+    participantsEl.innerHTML += `<div class="participant">${p}</div>`;
+    hostParticipantsEl.innerHTML += `<div class="participant">${p}</div>`;
+  });
+}
+
+// --- AVVIA PARTITA (Narratore) ---
+document.getElementById("startGameBtn").addEventListener("click", ()=>{
+  // assegna ruoli casualmente
+  let rolesPool = [];
+  while(rolesPool.length < players.length){
+    rolesPool = rolesPool.concat(roles);
+  }
+  rolesPool = rolesPool.slice(0, players.length);
+  rolesPool.sort(()=>Math.random()-0.5); // mescola
+  players.forEach((p,i)=>{
+    roleAssignments[p] = rolesPool[i];
+  });
+  // mostra schermata giocatore
+  playerScreenEl.classList.remove("hidden");
+  roomDisplayEl.textContent = roomName;
+  playerDisplayEl.textContent = playerName;
+  const myRole = roleAssignments[playerName] || "Contadino";
+  roleNameEl.textContent = myRole;
+  roleIconEl.textContent = getRoleIcon(myRole);
+  roleRulesEl.textContent = getRoleRules(myRole);
+});
+
+// --- FUNZIONE ICONA RUOLO ---
+function getRoleIcon(role){
+  switch(role){
+    case "Lupus": return "🐺";
+    case "Veggente": return "👁";
+    case "Contadino": return "🌾";
+    case "Medium": return "🔮";
+    case "Guardia": return "🛡";
+    default: return "❓";
+  }
+}
+
+// --- FUNZIONE TESTO RUOLO ---
+function getRoleRules(role){
+  switch(role){
+    case "Lupus": return "Di notte scegliete una vittima insieme agli altri Lupus.";
+    case "Veggente": return "Ogni notte puoi vedere il ruolo di un giocatore.";
+    case "Contadino": return "Non ha poteri speciali, partecipa alle discussioni.";
+    case "Medium": return "Puoi sapere se un giocatore eliminato era Lupus.";
+    case "Guardia": return "Puoi proteggere un giocatore dalla morte per una notte.";
+    default: return "";
+  }
+}
+
+// --- TOGGLE REGOLE RUOLO ---
+roleIconEl.addEventListener("click", ()=>{
+  roleRulesEl.classList.toggle("hidden");
+});
+
+// --- OVERLAY REGOLE ---
+document.getElementById("generalRulesBtn").addEventListener("click", ()=> overlayEl.classList.remove("hidden"));
+document.getElementById("closeOverlay").addEventListener("click", ()=> overlayEl.classList.add("hidden"));
+
+</script>
+</body>
+</html>
